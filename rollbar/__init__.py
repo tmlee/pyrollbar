@@ -22,6 +22,18 @@ import wsgiref.util
 
 import requests
 
+# SSL Patch from https://lukasa.co.uk/2013/01/Choosing_SSL_Version_In_Requests/
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
+import ssl
+
+class MyAdapter(HTTPAdapter):
+    def init_poolmanager(self, connections, maxsize, block=False):
+        self.poolmanager = PoolManager(num_pools=connections,
+                                       maxsize=maxsize,
+                                       block=block,
+                                       ssl_version=ssl.PROTOCOL_TLSv1)
+
 log = logging.getLogger(__name__)
 
 try:
@@ -182,7 +194,7 @@ except ImportError:
     TwistedHTTPClient = None
     inlineCallbacks = passthrough_decorator
     StringProducer = None
-    
+
 
 def get_request():
     """
@@ -1220,7 +1232,10 @@ def _post_api(path, payload, access_token=None):
     payload = ErrorIgnoringJSONEncoder().encode(payload)
 
     url = urlparse.urljoin(SETTINGS['endpoint'], path)
-    resp = requests.post(url,
+
+    custom_req = requests.Session()
+    custom_req.mount('https://', MyAdapter())
+    resp = custom_req.post(url,
                          data=payload,
                          headers=headers,
                          timeout=SETTINGS.get('timeout', DEFAULT_TIMEOUT),
